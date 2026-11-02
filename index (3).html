@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Catch the Star</title>
+<style>
+  :root {
+    --bg: #f1f5f9; --fg: #0f172a; --muted: #64748b; --accent: #b45309;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #0f172a; --fg: #ffffff; --muted: #9ca3af; --accent: #facc15; }
+  }
+  :root[data-theme="dark"] { --bg: #0f172a; --fg: #ffffff; --muted: #9ca3af; --accent: #facc15; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  h1 { margin: 0 0 8px; font-size: 1.75rem; color: var(--accent); text-align: center; }
+  .wrap { width: 100%; max-width: 400px; }
+  .hud { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 1.25rem; font-weight: 600; }
+  .stage { position: relative; }
+  canvas {
+    display: block; width: 100%; height: auto; aspect-ratio: 4 / 5;
+    background: #1e293b; border: 4px solid #38bdf8; border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,.3); touch-action: none;
+  }
+  #box {
+    position: absolute; inset: 0; background: rgba(15,23,42,.92); border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; color: #fff;
+  }
+  #box.hidden { display: none; }
+  #msg { margin: 0 0 16px; font-size: 1.5rem; color: #facc15; }
+  .play {
+    padding: 10px 24px; background: #eab308; color: #020617; font-weight: 700; font-size: 1rem;
+    border: 0; border-radius: 8px; cursor: pointer;
+  }
+  .play:hover { background: #facc15; }
+  .pad { display: flex; gap: 12px; margin-top: 12px; }
+  .pad button {
+    flex: 1; padding: 14px 0; font-size: 1.5rem; border: 0; border-radius: 10px;
+    background: #38bdf8; color: #020617; cursor: pointer; touch-action: none; user-select: none;
+  }
+  .pad button:active { background: #0ea5e9; }
+  .hint { margin: 12px 0 0; font-size: .875rem; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+  <h1>⭐️ Catch the Star ⭐️</h1>
+  <div class="wrap">
+    <div class="hud">
+      <div>Счёт: <span id="score">0</span></div>
+      <div>Жизни: <span id="lives">❤️❤️❤️</span></div>
+    </div>
+    <div class="stage">
+      <canvas id="c" width="400" height="500"></canvas>
+      <div id="box">
+        <h2 id="msg">Ловите звёзды!</h2>
+        <button class="play" id="playBtn">Играть</button>
+      </div>
+    </div>
+    <div class="pad">
+      <button id="left" aria-label="Влево">◄</button>
+      <button id="right" aria-label="Вправо">►</button>
+    </div>
+    <p class="hint">Управление: стрелки ◄ ►, кнопки или мышь/палец по полю</p>
+  </div>
+
+<script>
+  const cv = document.getElementById('c');
+  const ctx = cv.getContext('2d');
+  const box = document.getElementById('box');
+  const msg = document.getElementById('msg');
+  let score = 0, lives = 3, active = false;
+  const p = { x: 160, w: 80, dx: 0 };
+  const s = { x: 200, y: 0, r: 12, sp: 3 };
+
+  const clamp = () => { p.x = Math.max(0, Math.min(400 - p.w, p.x)); };
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') { p.dx = -7; e.preventDefault(); }
+    if (e.key === 'ArrowRight') { p.dx = 7; e.preventDefault(); }
+  });
+  document.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') p.dx = 0;
+  });
+
+  function hold(id, dx) {
+    const b = document.getElementById(id);
+    b.addEventListener('pointerdown', e => { e.preventDefault(); p.dx = dx; });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t =>
+      b.addEventListener(t, () => { p.dx = 0; }));
+  }
+  hold('left', -7);
+  hold('right', 7);
+
+  cv.addEventListener('pointermove', e => {
+    if (!active) return;
+    const r = cv.getBoundingClientRect();
+    p.x = (e.clientX - r.left) * 400 / r.width - p.w / 2;
+    clamp();
+  });
+
+  function resetStar() {
+    s.x = Math.random() * 370 + 15;
+    s.y = -20;
+  }
+
+  function start() {
+    score = 0; lives = 3; s.sp = 3; active = true;
+    p.x = 160; p.dx = 0;
+    document.getElementById('score').textContent = 0;
+    document.getElementById('lives').textContent = '❤️❤️❤️';
+    box.classList.add('hidden');
+    resetStar();
+    loop();
+  }
+  document.getElementById('playBtn').addEventListener('click', start);
+
+  function loop() {
+    if (!active) return;
+
+    p.x += p.dx;
+    clamp();
+    s.y += s.sp;
+
+    if (s.y + s.r >= 460 && s.x >= p.x && s.x <= p.x + p.w) {
+      score++;
+      document.getElementById('score').textContent = score;
+      if (score % 5 === 0) s.sp += 0.5;
+      resetStar();
+    }
+
+    if (s.y > 500) {
+      lives--;
+      document.getElementById('lives').textContent = '❤️'.repeat(Math.max(0, lives));
+      if (lives <= 0) {
+        active = false;
+        msg.textContent = `Игра окончена! Счёт: ${score}`;
+        box.classList.remove('hidden');
+      } else {
+        resetStar();
+      }
+    }
+
+    ctx.clearRect(0, 0, 400, 500);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(p.x, 460, p.w, 15);
+    ctx.fillStyle = '#facc15';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    requestAnimationFrame(loop);
+  }
+</script>
+</body>
+</html>
